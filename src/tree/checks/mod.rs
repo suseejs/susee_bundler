@@ -182,7 +182,6 @@ fn print_report(report: &CheckReport) {
         helpers::CheckKind::Duplicates => "Duplicated declarations",
         helpers::CheckKind::Anonymous => "Anonymous imports/exports",
         helpers::CheckKind::ExportDefault => "export default usage",
-        helpers::CheckKind::MissingTypes => "Missing type annotations",
         helpers::CheckKind::UndefinedUsage => "Undefined identifier usage",
     };
 
