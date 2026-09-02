@@ -10,7 +10,13 @@
     "type": "git",
     "url": "git+https://github.com/suseejs/susee_bundler.git"
   },
-  "keywords": [],
+  "keywords": [
+    "bundler",
+    "susee",
+    "suseejs"
+  ],
+  "author": "Pho Thin Mg <phothinmg@disroot.org> (https://phothinmg.github.io/)",
+  "license": "Apache-2.0",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/suseejs/susee_bundler/issues"
@@ -23,8 +29,7 @@
     "README.md",
     "LICENSE",
     "index.js",
-    "index.d.ts",
-    "bin/**/*"
+    "index.d.ts"
   ],
   "publishConfig": {
     "access": "public"
