@@ -6,4 +6,4 @@ mod index;
 mod json_handler;
 mod package_info;
 
-pub use index::susee_tree;
+pub use index::{CheckOptions, susee_tree};

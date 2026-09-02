@@ -1,1 +1,4 @@
 /target
+/__local__
+/npm
+/node_modules

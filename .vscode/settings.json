@@ -9,13 +9,17 @@
     "dfoo",
     "dhello",
     "efault",
+    "indexmap",
     "jconfig",
+    "msvc",
     "napi",
     "nique",
     "nonymous",
     "rlib",
     "serde",
     "susee",
+    "suseejs",
+    "topo",
     "ushared"
   ]
 }

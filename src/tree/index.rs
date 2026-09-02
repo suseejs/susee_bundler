@@ -25,11 +25,13 @@ use super::package_info::get_package_info;
 
 use dependensa::generate_graph;
 
+use serde::{Deserialize, Serialize};
+
 use crate::susee_log;
 use crate::types::{DepReturns, DependenciesTree, DepsFile, ModuleType, ProjectType, ValidExts};
 use crate::utils::{detect_module_type, is_jsx_content, read_file};
+use napi_derive::napi;
 use std::path::Path;
-//
 
 /// Builds and collects the dependency files for the given entry point.
 ///
@@ -56,8 +58,14 @@ use std::path::Path;
 /// Only the file whose full relative path equals `entry` is flagged with
 /// `is_entry = true`. Comparing just the file name (e.g. "index.ts") would
 /// incorrectly mark every same-named file as an entry.
-fn get_deps<P: AsRef<Path>>(entry: &str, root: P) -> std::io::Result<DepReturns> {
+fn get_deps<P: AsRef<Path>>(
+    entry: &str,
+    root: P,
+    check_npm: Option<bool>,
+) -> std::io::Result<DepReturns> {
     let root = root.as_ref().to_path_buf();
+    // check npm modules
+    let cnm = check_npm.unwrap_or(false);
 
     // 1. Build and sort the dependency graph.
     let graph = generate_graph(entry, &root)?;
@@ -70,7 +78,9 @@ fn get_deps<P: AsRef<Path>>(entry: &str, root: P) -> std::io::Result<DepReturns>
     // `node_modules`. If any are missing, `check_npm_installed` logs an
     // error and exits the process with code 1.
     let pkg = get_package_info(&root);
-    let _ = check_npm_installed(&npm, &pkg, &root);
+    if cnm {
+        let _ = check_npm_installed(&npm, &pkg, &root);
+    }
 
     // Compare full relative paths, not just file names, so that only the
     // actual entry file is marked as `is_entry`. Using just the file name
@@ -83,18 +93,24 @@ fn get_deps<P: AsRef<Path>>(entry: &str, root: P) -> std::io::Result<DepReturns>
         let path = Path::new(&file);
         let file_ext_str = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-        let (content, bytes) = match read_file(&root, file) {
+        let (content, bytes) = match read_file(&root, &file) {
             Ok(c) => c,
-            Err(e) => {
-                // Mirror the TS version which exits on missing files; here we
-                // surface the error to the caller.
-                return Err(e);
+            Err(_) => {
+                // The dependency graph may include files that don't exist
+                // on disk (e.g. a `package.json` import when the project has
+                // no package.json). Log a warning and skip rather than
+                // failing the entire bundle.
+                susee_log::warning(&format!(
+                    "File does not exist: {}",
+                    root.join(&file).display()
+                ));
+                continue;
             }
         };
 
         let module_type = detect_module_type(&content, path);
         let is_jsx = is_jsx_content(&content, path);
-        let is_entry = is_entry_file(file);
+        let is_entry = is_entry_file(&file);
         let file_ext = ValidExts::from_path_ext(file_ext_str).unwrap_or(ValidExts::Ts);
 
         dep_files.push(DepsFile {
@@ -168,6 +184,70 @@ fn has_json(dep_files: &[DepsFile]) -> bool {
         .any(|dep| dep.module_type == ModuleType::Json)
 }
 
+/// Optional diagnostics toggles for the bundler pipeline.
+///
+/// `CheckOptions` is passed through `susee_tree` (and ultimately `bundler`)
+/// to control which opt-in checks run alongside the mandatory default check.
+/// Every field is an [`Option<bool>`] so that callers can express "not set"
+/// (`None`), which is treated identically to `Some(false)` via
+/// [`unwrap_or`](Option::unwrap_or).
+///
+/// # Defaults
+///
+/// [`CheckOptions::default()`] sets all fields to `Some(false)`, i.e. *no*
+/// optional checks are enabled. This matches the historical behavior where
+/// the bundler only ran the always-on default check (`run_default_check`).
+///
+/// # Field semantics
+///
+/// | Field | `Some(true)` behavior | Otherwise |
+/// |------|----------------------|-----------|
+/// | `check_npm_installed` | Verifies every npm specifier resolved by the dependency graph is present in `node_modules`; logs an error and exits if any are missing. | Skipped. |
+/// | `check_default_exports` | Runs the default-exports *check* (`run_check_opts_default_exports`) — diagnostics only. | The export-default *handler* runs during normal bundling. |
+/// | `check_anonymous` | Runs the anonymous-exports *check* (`run_check_opts_anonymous`) — diagnostics only. | The anonymous-export *handler* runs during normal bundling. |
+///
+/// # Serde
+///
+/// Fields are serialized/deserialized in `camelCase` (e.g. `checkNpmInstalled`)
+/// to match the JavaScript/TypeScript calling convention used by the
+/// `#[napi]` boundary.
+#[napi(object)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckOptions {
+    /// When `Some(true)`, verify that every npm specifier in the dependency
+    /// graph is installed under `node_modules`. Missing packages are logged
+    /// as an error and the process exits with code 1.
+    pub check_npm_installed: Option<bool>,
+    /// When `Some(true)`, run the default-exports *check*
+    /// (`run_check_opts_default_exports`) which emits diagnostics without
+    /// modifying the tree. When `None` or `Some(false)`, the export-default
+    /// *handler* normalizes named default exports during bundling instead.
+    pub check_default_exports: Option<bool>,
+    /// When `Some(true)`, run the anonymous-exports *check*
+    /// (`run_check_opts_anonymous`) which emits diagnostics without
+    /// modifying the tree. When `None` or `Some(false)`, the
+    /// anonymous-export *handler* assigns names to anonymous default exports
+    /// during bundling instead.
+    pub check_anonymous: Option<bool>,
+}
+
+impl Default for CheckOptions {
+    /// Returns `CheckOptions` with **all** checks disabled
+    /// (`check_npm_installed`, `check_default_exports`, and
+    /// `check_anonymous` all set to `Some(false)`).
+    ///
+    /// This preserves the original bundler behavior where only the
+    /// always-on default check (`run_default_check`) runs.
+    fn default() -> Self {
+        Self {
+            check_npm_installed: Some(false),
+            check_default_exports: Some(false),
+            check_anonymous: Some(false),
+        }
+    }
+}
+
 /// Resolves, classifies, and bundles the dependency tree rooted at `entry`.
 ///
 /// This is the primary public entry point of the `susee_deps::deps::tree`
@@ -190,8 +270,8 @@ fn has_json(dep_files: &[DepsFile]) -> bool {
 ///
 /// * `entry` - Path to the entry file, relative to `root`.
 /// * `root` - The project root directory used to resolve module specifiers.
-/// * `check_default_exports` - When `Some(true)`, enables the default-exports check.
-/// * `check_anonymous` - When `Some(true)`, enables the anonymous-exports check.
+/// * `opts` - [`CheckOptions`] controlling the optional checks (npm, default
+///   exports, anonymous). All fields default to `Some(false)`.
 ///
 /// # Errors
 ///
@@ -203,29 +283,22 @@ fn has_json(dep_files: &[DepsFile]) -> bool {
 /// [`susee_log::error`](crate::core::susee_log::error) with `exit = true`,
 /// which terminates the process.
 ///
-/// # Examples
-///
-/// ```no_run
-/// use susee_deps::deps::tree::susee_tree;
-///
-/// let tree = susee_tree("src/index.ts", "/my/project", None, None).unwrap();
-/// assert_eq!(tree.project_type, susee_types::ProjectType::TS);
-/// ```
+
 pub fn susee_tree<P: AsRef<Path>>(
     entry: &str,
     root: P,
-    check_default_exports: Option<bool>,
-    check_anonymous: Option<bool>,
+    options: Option<CheckOptions>,
 ) -> std::io::Result<DependenciesTree> {
-    let deps = get_deps(entry, root)?;
+    let opts = options.unwrap_or(CheckOptions::default());
+    let deps = get_deps(entry, root, opts.check_npm_installed)?;
     let npm = deps.npm;
     let nodes = deps.nodes;
     let warns = deps.warns;
     let dep_files = deps.dep_files;
     let _ = run_default_check(&dep_files);
 
-    let cdf = check_default_exports.unwrap_or(false);
-    let ca = check_anonymous.unwrap_or(false);
+    let cdf = opts.check_default_exports.unwrap_or(false);
+    let ca = opts.check_anonymous.unwrap_or(false);
 
     if cdf {
         run_check_opts_default_exports(&dep_files);

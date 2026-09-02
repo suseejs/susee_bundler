@@ -6,10 +6,14 @@ use crate::utils::{is_non_local_import, merge_content, merge_imports_statement};
 use hooks::{anonymous_handler, clean, export_default_handler, remove_handler};
 use std::path::Path;
 
+use napi_derive::napi;
+
+#[napi]
 /// The output of a successful bundle operation.
 ///
-/// Contains the final bundled source code and the detected [`ProjectType`]
+/// Contains the final bundled source code and the detected `ProjectType`
 /// (TS, JS, or MIXED) of the project.
+
 pub struct BundleResult {
     /// The final bundled source code, pretty-printed via oxc's codegen.
     pub bundled_code: String,
@@ -30,13 +34,11 @@ pub struct BundleResult {
 /// * `entry` — The entry file path, relative to `root` (e.g. `"src/index.ts"`).
 /// * `root` — The project root directory. Anything implementing [`AsRef<Path>`]
 ///   is accepted (e.g. `&str`, `PathBuf`, `&Path`).
-/// * `check_default_exports` — When `Some(true)`, runs the export-default
-///   *check* (diagnostics only) instead of the export-default *handler*
-///   (which renames/normalizes). When `None` or `Some(false)`, the handler
-///   runs during normal bundling.
-/// * `check_anonymous` — When `Some(true)`, runs the anonymous-export *check*
-///   (diagnostics only) instead of the anonymous-export *handler*. When `None`
-///   or `Some(false)`, the handler runs during normal bundling.
+/// * `opts` — [`CheckOptions`](crate::tree::CheckOptions) controlling the
+///   optional checks (npm, default exports, anonymous). When a check field
+///   is `Some(true)`, the corresponding *check* (diagnostics only) runs instead
+///   of the *handler* (which renames/normalizes). When `None` or `Some(false)`,
+///   the handler runs during normal bundling.
 ///
 /// # Returns
 ///
@@ -45,11 +47,11 @@ pub struct BundleResult {
 ///
 /// # Pipeline
 ///
-/// 1. [`susee_tree`] — resolve the dependency tree and detect [`ProjectType`].
+/// 1. `susee_tree` — resolve the dependency tree and detect `ProjectType`.
 /// 2. [`export_default_handler`] — normalize named default exports (skipped
-///    when `check_default_exports == Some(true)`).
+///    when `opts.check_default_exports == Some(true)`).
 /// 3. [`anonymous_handler`] — name anonymous default exports (skipped when
-///    `check_anonymous == Some(true)`).
+///    `opts.check_anonymous == Some(true)`).
 /// 4. [`remove_handler`] — strip all import/export syntax; collect removed
 ///    import text for re-emission.
 /// 5. Filter removed imports to non-local only (npm packages, node built-ins)
@@ -67,25 +69,16 @@ pub struct BundleResult {
 /// Returns `Err` if `susee_tree` fails to resolve the entry file or any of
 /// its dependencies.
 ///
-/// # Example
-///
-/// ```no_run
-/// use susee_bundler::bundler;
-///
-/// let result = bundler("src/index.ts", ".", None, None).unwrap();
-/// println!("{}", result.bundled_code);
-/// ```
 pub fn bundler<P: AsRef<Path>>(
     entry: &str,
     root: P,
-    check_default_exports: Option<bool>,
-    check_anonymous: Option<bool>,
+    opts: crate::tree::CheckOptions,
 ) -> std::io::Result<BundleResult> {
-    let tree = susee_tree(entry, root, check_default_exports, check_anonymous)?;
+    let tree = susee_tree(entry, root, Some(opts.clone()))?;
     let project_type = tree.project_type;
     let mut dep_files: Vec<super::types::DepsFile> = tree.dep_files;
-    let cde = check_default_exports.unwrap_or(false);
-    let ca = check_anonymous.unwrap_or(false);
+    let cde = opts.check_default_exports.unwrap_or(false);
+    let ca = opts.check_anonymous.unwrap_or(false);
     if !cde {
         dep_files = export_default_handler(dep_files);
     }

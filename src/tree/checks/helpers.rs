@@ -37,7 +37,7 @@ pub enum CheckKind {
     Duplicates,
     Anonymous,
     ExportDefault,
-    UndefinedUsage,
+    // UndefinedUsage,
 }
 
 impl CheckKind {
@@ -46,7 +46,7 @@ impl CheckKind {
             Self::Duplicates => "check:Duplicates",
             Self::Anonymous => "check:Anonymous",
             Self::ExportDefault => "check:ExportDefault",
-            Self::UndefinedUsage => "check:UndefinedUsage",
+            //Self::UndefinedUsage => "check:UndefinedUsage",
         }
     }
 }
@@ -567,46 +567,46 @@ fn export_default_kind_label(decl: &ExportDefaultDeclaration<'_>) -> &'static st
 
 /// Detect identifier references that are never declared or imported in their
 /// file and are not known globals/built-ins.
-pub fn check_undefined_usage(dep_files: &[DepsFile]) -> CheckReport {
-    let mut report = CheckReport::new(CheckKind::UndefinedUsage);
+// pub fn check_undefined_usage(dep_files: &[DepsFile]) -> CheckReport {
+//     let mut report = CheckReport::new(CheckKind::UndefinedUsage);
 
-    for dep in dep_files {
-        let undefined = with_parsed_program(&dep.file, &dep.content, |program| {
-            find_undefined_references(program, dep)
-        });
+//     for dep in dep_files {
+//         let undefined = with_parsed_program(&dep.file, &dep.content, |program| {
+//             find_undefined_references(program, dep)
+//         });
 
-        if undefined.is_empty() {
-            continue;
-        }
+//         if undefined.is_empty() {
+//             continue;
+//         }
 
-        let mut sorted = undefined;
-        sorted.sort_by_key(|(_, l, c)| (*l, *c));
-        sorted.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1 && a.2 == b.2);
+//         let mut sorted = undefined;
+//         sorted.sort_by_key(|(_, l, c)| (*l, *c));
+//         sorted.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1 && a.2 == b.2);
 
-        let mut details = vec!["  undefined references:".to_string()];
-        for (name, line, col) in &sorted {
-            details.push(format!(
-                "    {name}  at {file}:{line}:{col}",
-                file = dep.file
-            ));
-        }
-        details.push(format!(
-            "  suggestion: declare, import, or alias `{name}` before using it",
-            name = sorted.first().map(|(n, _, _)| n.as_str()).unwrap_or("it")
-        ));
-        report.items.push(CheckItem {
-            message: format!(
-                "{} undefined identifier(s) in {file}",
-                sorted.len(),
-                file = dep.file
-            ),
-            details,
-        });
-    }
+//         let mut details = vec!["  undefined references:".to_string()];
+//         for (name, line, col) in &sorted {
+//             details.push(format!(
+//                 "    {name}  at {file}:{line}:{col}",
+//                 file = dep.file
+//             ));
+//         }
+//         details.push(format!(
+//             "  suggestion: declare, import, or alias `{name}` before using it",
+//             name = sorted.first().map(|(n, _, _)| n.as_str()).unwrap_or("it")
+//         ));
+//         report.items.push(CheckItem {
+//             message: format!(
+//                 "{} undefined identifier(s) in {file}",
+//                 sorted.len(),
+//                 file = dep.file
+//             ),
+//             details,
+//         });
+//     }
 
-    report
-}
-
+//     report
+// }
+#[allow(unused)]
 /// A set of identifiers that are always considered defined (JS globals,
 /// Node.js globals, TS utility types, and common ambient declarations).
 fn known_globals() -> &'static [&'static str] {
@@ -766,6 +766,7 @@ fn known_globals() -> &'static [&'static str] {
 
 /// Find `(name, line, col)` for identifier references that are not bound in
 /// the file's scopes and are not known globals.
+#[allow(unused)]
 fn find_undefined_references(program: &Program<'_>, dep: &DepsFile) -> Vec<(String, usize, usize)> {
     use oxc::semantic::SemanticBuilder;
 

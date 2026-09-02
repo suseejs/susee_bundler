@@ -115,6 +115,7 @@ impl ModuleType {
     }
 }
 /// The type of project, determined by the languages used in its source files.
+#[napi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectType {

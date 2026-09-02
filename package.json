@@ -1,0 +1,32 @@
+{
+  "name": "@suseejs/susee_bundler",
+  "version": "0.1.0",
+  "description": "Bundler for susee js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suseejs/susee_bundler.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/suseejs/susee_bundler/issues"
+  },
+  "homepage": "https://github.com/suseejs/susee_bundler#readme",
+  "devDependencies": {
+    "@napi-rs/cli": "^3.9.0"
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "index.js",
+    "index.d.ts",
+    "bin/**/*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

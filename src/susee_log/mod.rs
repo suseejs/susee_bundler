@@ -33,7 +33,7 @@ pub fn bundle_time(start: Instant) {
     let ms = elapsed.as_secs_f64() * 1000.0;
     eprintln!("[{}] : {}ms", "Bundled".cyan().bold(), format!("{ms:.1}"));
 }
-
+#[allow(unused)]
 pub fn build_time(start: Instant) {
     let elapsed = start.elapsed();
     let ms = elapsed.as_secs_f64() * 1000.0;

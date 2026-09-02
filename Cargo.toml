@@ -12,6 +12,7 @@ exclude = ["src/main.rs"]
 [dependencies]
 dependensa = "0.3.0"
 colored = "2"
+indexmap = { version = "2", features = ["serde"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*", features = ["preserve_order"] }
 oxc = { version = "*", features = [
