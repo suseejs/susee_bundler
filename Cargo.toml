@@ -1,6 +1,6 @@
 [package]
 name = "susee_bundler"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/suseejs/susee_bundler"
@@ -35,4 +35,4 @@ name = "susee_bundler"
 path = "src/lib.rs"
 # `rlib` for the CLI binary + integration tests; `cdylib` for the Node
 # native addon (only built when the `napi` feature is on).
-crate-type = ["rlib", "cdylib"]
+crate-type = ["cdylib"]

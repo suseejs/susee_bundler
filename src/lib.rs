@@ -8,7 +8,6 @@ mod utils;
 use napi_derive::napi;
 
 pub use bundler::BundleResult;
-pub use bundler::bundler;
 use colored::*;
 use std::path::Path;
 use std::time::Instant;
