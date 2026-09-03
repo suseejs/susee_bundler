@@ -364,19 +364,33 @@ pub fn merge_imports_statement(imports: &[String]) -> Vec<String> {
     // Process named imports
     for (module_path, regular_names) in &import_map {
         let type_names = type_import_map.get(module_path);
-        let mut final_names: Vec<String> = regular_names.clone();
+
+        // Build list of (name, is_type) pairs so that type-only specifiers
+        // retain their inline `type` keyword after merging.
+        let mut entries: Vec<(String, bool)> =
+            regular_names.iter().map(|n| (n.clone(), false)).collect();
 
         if let Some(type_names) = type_names {
             for type_name in type_names {
-                if !regular_names.contains(type_name) && !final_names.contains(type_name) {
-                    final_names.push(type_name.clone());
+                if !regular_names.contains(type_name) {
+                    entries.push((type_name.clone(), true));
                 }
             }
         }
 
-        if !final_names.is_empty() {
-            final_names.sort();
-            let import_names = final_names.join(", ");
+        if !entries.is_empty() {
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let import_names = entries
+                .iter()
+                .map(|(name, is_type)| {
+                    if *is_type {
+                        format!("type {name}")
+                    } else {
+                        name.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             merged.push(format!(
                 "import {{ {import_names} }} from \"{module_path}\";"
             ));
