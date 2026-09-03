@@ -33,7 +33,9 @@ use crate::susee_log;
 use crate::types::DepsFile;
 use colored::Colorize;
 
-use helpers::{CheckReport, check_anonymous, check_default_exports, check_duplicates};
+use helpers::{
+    CheckReport, check_anonymous, check_default_exports, check_duplicates, check_undefined_usage,
+};
 
 /// Run the three hard-gate checks ([`check_duplicates`],
 /// [`check_missing_types`], [`check_undefined_usage`]) and aggregate their
@@ -43,7 +45,10 @@ use helpers::{CheckReport, check_anonymous, check_default_exports, check_duplica
 /// as soon as any one of them does. Each non-empty report is printed by
 /// [`print_report`] before returning.
 fn check_default(dep_files: &[DepsFile]) -> Result<(), ()> {
-    let reports: Vec<CheckReport> = vec![check_duplicates(dep_files)];
+    let reports: Vec<CheckReport> = vec![
+        check_duplicates(dep_files),
+        check_undefined_usage(dep_files),
+    ];
 
     let mut had_issue = false;
     for report in &reports {
@@ -177,7 +182,7 @@ fn print_report(report: &CheckReport) {
         helpers::CheckKind::Duplicates => "Duplicated declarations",
         helpers::CheckKind::Anonymous => "Anonymous imports/exports",
         helpers::CheckKind::ExportDefault => "export default usage",
-        //helpers::CheckKind::UndefinedUsage => "Undefined identifier usage",
+        helpers::CheckKind::UndefinedUsage => "Undefined identifier usage",
     };
 
     eprintln!();

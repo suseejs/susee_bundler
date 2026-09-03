@@ -1,6 +1,6 @@
 [package]
 name = "susee_bundler"
-version = "0.1.1"
+version = "0.1.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/suseejs/susee_bundler"
@@ -30,9 +30,12 @@ tempfile = "3"
 [build-dependencies]
 napi-build = "2"
 
+[lints.rust]
+missing_docs = "warn"
+
 [lib]
 name = "susee_bundler"
 path = "src/lib.rs"
 # `rlib` for the CLI binary + integration tests; `cdylib` for the Node
 # native addon (only built when the `napi` feature is on).
-crate-type = ["cdylib"]
+crate-type = ["rlib", "cdylib"]

@@ -10,6 +10,9 @@
 use colored::*;
 use std::time::Instant;
 
+/// Print a formatted error message to stderr.
+///
+/// When `e` is `true` the process exits with code 1 after printing.
 pub fn error(info: &str, cause: &str, e: bool) {
     eprintln!("[{}]", "error".red().bold());
     eprintln!(" info  : {}", info);
@@ -18,22 +21,25 @@ pub fn error(info: &str, cause: &str, e: bool) {
         std::process::exit(1)
     }
 }
-#[allow(unused)]
+/// Print a formatted info message to stderr.
 pub fn info(message: &str) {
     eprintln!("[{}]", "info".green().bold());
     eprintln!(" {}", message);
 }
 
+/// Print a formatted warning message to stderr.
 pub fn warning(message: &str) {
     eprintln!("[{}]", "warning".yellow().bold());
     eprintln!(" {}", message);
 }
+/// Print the elapsed time since `start` as a bundle-time measurement in milliseconds.
 pub fn bundle_time(start: Instant) {
     let elapsed = start.elapsed();
     let ms = elapsed.as_secs_f64() * 1000.0;
     eprintln!("[{}] : {}ms", "Bundled".cyan().bold(), format!("{ms:.1}"));
 }
-#[allow(unused)]
+
+/// Print the elapsed time since `start` as a build-time measurement in milliseconds.
 pub fn build_time(start: Instant) {
     let elapsed = start.elapsed();
     let ms = elapsed.as_secs_f64() * 1000.0;
