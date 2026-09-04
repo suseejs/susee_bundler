@@ -5,6 +5,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/suseejs/susee_bundler"
 readme = "README.md"
+description = "A TypeScript/JavaScript bundler for susee js"
 # Exclude the internal test binary and its generated JSON output from the
 # published crate. `src/main.rs` is a local test harness, not a shipped binary.
 exclude = ["src/main.rs"]
