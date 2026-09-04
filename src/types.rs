@@ -89,6 +89,12 @@ impl ValidExts {
     }
 }
 /// The module system a file uses.
+///
+/// On [`DependenciesTree`] and [`BundleResult`] this represents the
+/// **original** module system detected before any conversion handlers run.
+/// It lets the main package (susee) warn users when CJS/CTS files were
+/// auto-converted to ESM.
+#[napi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ModuleType {
@@ -165,6 +171,10 @@ pub struct DependenciesTree {
     pub dep_files: Vec<DepsFile>,
     /// Type of the project
     pub project_type: ProjectType,
+    /// The **original** module system detected before conversion handlers
+    /// ran. `Esm` means no conversion was needed; `Cjs`/`Cts` means those
+    /// files were found and auto-converted to ESM.
+    pub module_type: ModuleType,
 }
 
 /// Detects the module system used by a source file by walking its AST.

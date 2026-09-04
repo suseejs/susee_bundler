@@ -13,16 +13,31 @@
 //!    default/anonymous/default-export checks, and routes the files through
 //!    the correct handler ([`cjs_handler`], [`cts_handler`], [`json_handler`]).
 //!
-//! Mixed ESM + CommonJS/CTS projects are rejected with an error because Susee
-//! targets library packages only.
+//! CJS, CTS, and JSON files are converted to ESM per-file by the handlers,
+//! so mixed-module trees (e.g. an ESM `.ts` entry importing a legacy CJS
+//! `.js` dependency) are supported — each handler only touches files of its
+//! target module type and passes through everything else unchanged.
 
 use super::checks::{
     check_installed, run_check_opts_anonymous, run_check_opts_default_exports, run_default_check,
 };
 use super::cjs_handler::cjs_handler;
+#[allow(deprecated)]
 use super::cts_handler::cts_handler;
 use super::json_handler::json_handler;
 use super::package_info::get_package_info;
+
+/// Wrapper around the deprecated `cts_handler` so the deprecation lint is
+/// contained here rather than at the call site in `susee_tree`.
+///
+/// `cts_handler` is deprecated (since 0.2.4) — CTS is being phased out by
+/// TypeScript. We still call it for backward compatibility so users with
+/// existing `.cts` files get a graceful conversion path. The deprecation is
+/// surfaced to library authors via a runtime warning in `susee_tree`.
+#[allow(deprecated)]
+fn run_cts_handler(deps: Vec<DepsFile>) -> Vec<DepsFile> {
+    cts_handler(deps)
+}
 
 use dependensa::generate_graph;
 
@@ -59,7 +74,11 @@ use std::path::Path;
 /// Only the file whose full relative path equals `entry` is flagged with
 /// `is_entry = true`. Comparing just the file name (e.g. "index.ts") would
 /// incorrectly mark every same-named file as an entry.
-fn get_deps<P: AsRef<Path>>(entry: &str, root: P, check_npm: bool) -> std::io::Result<DepReturns> {
+pub(crate) fn get_deps<P: AsRef<Path>>(
+    entry: &str,
+    root: P,
+    check_npm: bool,
+) -> std::io::Result<DepReturns> {
     let root = root.as_ref().to_path_buf();
 
     // 1. Build and sort the dependency graph.
@@ -128,6 +147,7 @@ fn get_deps<P: AsRef<Path>>(entry: &str, root: P, check_npm: bool) -> std::io::R
 }
 
 /// Returns `true` if any file in `dep_files` is classified as ESM.
+#[allow(dead_code)]
 fn has_esm(dep_files: &[DepsFile]) -> bool {
     dep_files
         .iter()
@@ -254,11 +274,11 @@ impl Default for CheckOptions {
 ///    when `check_default_exports` is `Some(true)`.
 /// 4. Optionally runs the anonymous-exports check ([`run_check_opts_anonymous`])
 ///    when `check_anonymous` is `Some(true)`.
-/// 5. Determines the [`ProjectType`] by inspecting file extensions and module
-///    types, dispatching to the appropriate handler:
-///    - **TS-only** projects → ESM (optionally JSON), or CTS via [`cts_handler`].
-///    - **JS-only** projects → ESM (optionally JSON), or CommonJS via [`cjs_handler`].
-///    - **Mixed** projects → ESM only; CommonJS/CTS combinations are rejected.
+/// 5. Determines the [`ProjectType`] by inspecting file extensions (TS, JS,
+///    or MIXED), then converts any non-ESM modules per-file:
+///    - CTS files → ESM via [`cts_handler`] (leaves ESM/CJS files unchanged).
+///    - CJS files → ESM via [`cjs_handler`] (leaves ESM/CTS files unchanged).
+///    - ESM files need no conversion, so mixed-module trees are supported.
 /// 6. JSON modules are post-processed through [`json_handler`] when present.
 ///
 /// # Arguments
@@ -274,9 +294,9 @@ impl Default for CheckOptions {
 ///
 /// # Panics
 ///
-/// Mixed ESM + CommonJS/CTS combinations are hard errors raised through
-/// [`susee_log::error`](crate::core::susee_log::error) with `exit = true`,
-/// which terminates the process.
+/// [`susee_log::error`](crate::core::susee_log::error) with `exit = true`
+/// may terminate the process if a mandatory check
+/// ([`run_default_check`]) fails.
 ///
 
 pub fn susee_tree<P: AsRef<Path>>(
@@ -302,12 +322,12 @@ pub fn susee_tree<P: AsRef<Path>>(
         run_check_opts_anonymous(&dep_files);
     }
 
-    // --- Classify the project and reject unsupported module mixes -----
+    // --- Classify the project by file extensions --------------------
     //
-    // Susee targets library packages only. Mixed module systems
-    // (ESM + CommonJS/CTS) are hard errors. Within a single system, CTS
-    // (CommonJS-in-TypeScript) and plain CommonJS are supported
-    // experimentally via dedicated handlers.
+    // `ProjectType` is determined purely by the mix of TypeScript and
+    // JavaScript file extensions found in the tree. Module-type conversion
+    // (CJS/CTS → ESM) happens separately below and does not affect this
+    // classification.
     let has_ts = has_ts_extensions(&dep_files);
     let has_js = has_js_extensions(&dep_files);
 
@@ -319,35 +339,50 @@ pub fn susee_tree<P: AsRef<Path>>(
         ProjectType::MIXED
     };
 
-    let has_esm = has_esm(&dep_files);
     let has_cjs = has_cjs(&dep_files);
     let has_cts = has_cts(&dep_files);
+    let has_json = has_json(&dep_files);
 
-    // Reject ESM mixed with CJS or CTS — no matter the extension mix.
-    if has_esm && (has_cjs || has_cts) {
-        let cause = if has_cjs && has_cts {
-            "ESM, CommonJS, and CTS (CommonJS in TypeScript) were all found in your dependency tree"
-        } else if has_cts {
-            "Both ESM and CTS (CommonJS in TypeScript) were found in your dependency tree"
-        } else {
-            "Both ESM and CommonJS or CTS (CommonJS in TypeScript) were found in your dependency tree"
-        };
-        let info = "Susee is a bundler specialized for library packages; mixed module types are unsupported.";
-        susee_log::error(info, cause, true);
-    }
+    // --- Determine the original module type ---------------------------
+    //
+    // This captures the module system *before* any conversion handlers run,
+    // so the main package (susee) can warn users when CJS/CTS files were
+    // auto-converted to ESM. Priority: CTS > CJS > JSON > ESM — we surface
+    // the most "needs conversion" type so consumers know action was taken.
+    let module_type = if has_cts {
+        ModuleType::Cts
+    } else if has_cjs {
+        ModuleType::Cjs
+    } else if has_json {
+        ModuleType::Json
+    } else {
+        ModuleType::Esm
+    };
 
     // --- Dispatch to the appropriate module-type handler ---------------
     //
-    // * CTS-only (TS project, no ESM)  → `cts_handler`
-    // * CJS-only (JS project, no ESM)  → `cjs_handler`
-    // * ESM-only or mixed extensions   → no handler needed (ESM is native)
+    // Both `cjs_handler` and `cts_handler` are per-file filters — they only
+    // touch files whose `module_type` matches (Cjs or Cts respectively) and
+    // pass through all other files (including ESM) unchanged. This makes them
+    // safe to run on mixed-module trees, e.g. an ESM `.ts` entry that imports
+    // a legacy CJS `.js` dependency.
+    //
+    // * has_cjs → `cjs_handler` (converts only CJS files, leaves ESM/CTS as-is)
+    // * has_cts → `cts_handler` (converts only CTS files, leaves ESM/CJS as-is)
+    // * ESM files never need conversion.
     let mut dep_files = dep_files;
-    if !has_esm && has_cts {
+    if has_cts {
+        // `cts_handler` is deprecated (since 0.2.4) — CTS is being phased out
+        // by TypeScript. We still call it for backward compatibility so users
+        // with existing `.cts` files get a graceful conversion path. The
+        // runtime warning below surfaces the deprecation to library authors;
+        // the deprecation lint is contained in `run_cts_handler`.
         susee_log::warning(
-            "Bundling the CTS module type (CommonJS in TypeScript) is experimental; be careful with complex import/export.",
+            "Bundling the CTS module type (CommonJS in TypeScript) is deprecated. Be careful with complex import/export.",
         );
-        dep_files = cts_handler(dep_files);
-    } else if !has_esm && has_cjs {
+        dep_files = run_cts_handler(dep_files);
+    }
+    if has_cjs {
         susee_log::warning(
             "Bundling the CommonJS module type is experimental; be careful with complex import/export.",
         );
@@ -355,10 +390,10 @@ pub fn susee_tree<P: AsRef<Path>>(
     }
 
     // Run the JSON handler last, regardless of the module-type path above.
-    if has_json(&dep_files) {
+    if has_json {
         dep_files = json_handler(dep_files);
     }
-
+    // fast-path for all-ESM projects,most modern projects will hit this path
     Ok(DependenciesTree {
         entry: entry.to_string(),
         npm,
@@ -366,6 +401,7 @@ pub fn susee_tree<P: AsRef<Path>>(
         warns,
         dep_files,
         project_type,
+        module_type,
     })
 }
 

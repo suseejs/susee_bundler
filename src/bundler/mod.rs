@@ -1,7 +1,7 @@
 mod hooks;
 
 use crate::tree::susee_tree;
-use crate::types::ProjectType;
+use crate::types::{ModuleType, ProjectType};
 use crate::utils::{is_non_local_import, merge_content, merge_imports_statement};
 use hooks::{anonymous_handler, clean, export_default_handler, remove_handler};
 use std::path::Path;
@@ -11,14 +11,19 @@ use napi_derive::napi;
 #[napi]
 /// The output of a successful bundle operation.
 ///
-/// Contains the final bundled source code and the detected `ProjectType`
-/// (TS, JS, or MIXED) of the project.
+/// Contains the final bundled source code, the detected `ProjectType`
+/// (TS, JS, or MIXED) of the project, and the original `ModuleType`
+/// detected before any conversion handlers ran.
 
 pub struct BundleResult {
     /// The final bundled source code, pretty-printed via oxc's codegen.
     pub bundled_code: String,
     /// The detected project type (TS / JS / MIXED).
     pub project_type: ProjectType,
+    /// The **original** module system detected before conversion handlers
+    /// ran. `Esm` means no conversion was needed; `Cjs`/`Cts` means those
+    /// files were found and auto-converted to ESM.
+    pub module_type: ModuleType,
 }
 
 /// Bundle a TypeScript/JavaScript project entry point into a single file.
@@ -76,6 +81,7 @@ pub fn bundler<P: AsRef<Path>>(
 ) -> std::io::Result<BundleResult> {
     let tree = susee_tree(entry, root, Some(opts.clone()))?;
     let project_type = tree.project_type;
+    let module_type = tree.module_type;
     let mut dep_files: Vec<super::types::DepsFile> = tree.dep_files;
     let cde = opts.check_default_exports.unwrap_or(false);
     let ca = opts.check_anonymous.unwrap_or(false);
@@ -127,6 +133,7 @@ pub fn bundler<P: AsRef<Path>>(
     Ok(BundleResult {
         bundled_code: content,
         project_type,
+        module_type,
     })
 }
 

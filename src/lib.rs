@@ -7,8 +7,23 @@
 //!
 //! The crate is exposed as a Node.js native addon via N-API; see
 //! [`susee_bundler`] for the main entry point.
+//!
+//! ## Citation
+//!
+//! This bundler module was originally written in TypeScript and has been
+//! ported and modified to Rust by the author with assistance from the
+//! **glm-5.2:cloud** model served via the [Ollama](https://ollama.com)
+//! platform.
+//!
+//! Key references consulted during the port:
+//!
+//! - Original TypeScript source — [susee v1.6.2](https://github.com/phothinmg/susee/releases/tag/1.6.2)
+//! - [`oxc`](https://crates.io/crates/oxc) 0.144.0 — AST, parser, and
+//!   codegen used for JavaScript/TypeScript analysis.
+//! - [Ollama](https://ollama.com) — local model runtime hosting glm-5.2:cloud.
 
 mod bundler;
+mod susee_lint;
 mod susee_log;
 mod tree;
 mod types;
@@ -22,6 +37,9 @@ pub use bundler::BundleResult;
 use colored::*;
 use std::path::Path;
 use std::time::Instant;
+/// Re-export of [`LintResult`], [`LintDiagnostic`], [`LintOptions`], and
+/// [`susee_lint`] from the susee_lint module.
+pub use susee_lint::{LintDiagnostic, LintOptions, LintResult, susee_lint};
 /// Re-export of [`CheckOptions`] from the tree module.
 pub use tree::CheckOptions;
 

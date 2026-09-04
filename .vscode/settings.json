@@ -16,6 +16,7 @@
     "napi",
     "nique",
     "nonymous",
+    "Ollama",
     "rlib",
     "serde",
     "susee",

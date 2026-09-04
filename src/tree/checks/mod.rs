@@ -28,7 +28,7 @@
 //! [`susee_log::error`] when any hard-gate check finds issues.
 
 pub mod check_installed;
-mod helpers;
+pub(crate) mod helpers;
 
 use crate::susee_log;
 use crate::types::DepsFile;

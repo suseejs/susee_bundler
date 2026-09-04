@@ -148,6 +148,18 @@ fn cts_file_handler(dep: &DepsFile) -> String {
 /// 3. Rename `.cts` extension to `.ts`.
 ///
 /// Non-CTS files are passed through unchanged.
+///
+/// # Deprecation
+///
+/// CTS (`.cts`) is a niche format that TypeScript itself is moving away
+/// from — the recommended approach is `.ts` with the `"module"` setting in
+/// `tsconfig.json`. This handler is kept for backward compatibility but will
+/// be removed in a future major version. Library authors should migrate any
+/// `.cts` files to `.ts` with ESM syntax.
+#[deprecated(
+    since = "0.2.4",
+    note = "CTS is a niche format being phased out by TypeScript; migrate .cts files to .ts with ESM syntax. This handler will be removed in a future major version."
+)]
 pub fn cts_handler(deps: Vec<DepsFile>) -> Vec<DepsFile> {
     let mut result = Vec::with_capacity(deps.len());
     for dep in &deps {
@@ -203,7 +215,10 @@ pub fn cts_handler(deps: Vec<DepsFile>) -> Vec<DepsFile> {
 //     })
 // }
 
+// Tests still exercise the deprecated function to ensure it keeps working
+// for existing users until it is removed.
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
