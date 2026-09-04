@@ -14,7 +14,7 @@
 //! normalized to their root package name before checking.
 use std::path::Path;
 
-use super::package_info::PackageInfo;
+use crate::tree::package_info::PackageInfo;
 
 /// Normalize an npm specifier to its root package name.
 ///
@@ -113,8 +113,8 @@ pub fn check_npm_installed(
 
 #[cfg(test)]
 mod tests {
-    use super::super::package_info::get_package_info;
     use super::*;
+    use crate::tree::package_info::get_package_info;
     use std::fs;
     use tempfile::tempdir;
 

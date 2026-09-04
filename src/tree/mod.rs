@@ -1,4 +1,3 @@
-mod check_installed;
 mod checks;
 mod cjs_handler;
 mod cts_handler;

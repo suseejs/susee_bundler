@@ -16,8 +16,9 @@
 //! Mixed ESM + CommonJS/CTS projects are rejected with an error because Susee
 //! targets library packages only.
 
-use super::check_installed::check_npm_installed;
-use super::checks::{run_check_opts_anonymous, run_check_opts_default_exports, run_default_check};
+use super::checks::{
+    check_installed, run_check_opts_anonymous, run_check_opts_default_exports, run_default_check,
+};
 use super::cjs_handler::cjs_handler;
 use super::cts_handler::cts_handler;
 use super::json_handler::json_handler;
@@ -58,14 +59,8 @@ use std::path::Path;
 /// Only the file whose full relative path equals `entry` is flagged with
 /// `is_entry = true`. Comparing just the file name (e.g. "index.ts") would
 /// incorrectly mark every same-named file as an entry.
-fn get_deps<P: AsRef<Path>>(
-    entry: &str,
-    root: P,
-    check_npm: Option<bool>,
-) -> std::io::Result<DepReturns> {
+fn get_deps<P: AsRef<Path>>(entry: &str, root: P, check_npm: bool) -> std::io::Result<DepReturns> {
     let root = root.as_ref().to_path_buf();
-    // check npm modules
-    let cnm = check_npm.unwrap_or(false);
 
     // 1. Build and sort the dependency graph.
     let graph = generate_graph(entry, &root)?;
@@ -78,8 +73,8 @@ fn get_deps<P: AsRef<Path>>(
     // `node_modules`. If any are missing, `check_npm_installed` logs an
     // error and exits the process with code 1.
     let pkg = get_package_info(&root);
-    if cnm {
-        let _ = check_npm_installed(&npm, &pkg, &root);
+    if check_npm {
+        let _ = check_installed::check_npm_installed(&npm, &pkg, &root);
     }
 
     // Compare full relative paths, not just file names, so that only the
@@ -290,7 +285,7 @@ pub fn susee_tree<P: AsRef<Path>>(
     options: Option<CheckOptions>,
 ) -> std::io::Result<DependenciesTree> {
     let opts = options.unwrap_or(CheckOptions::default());
-    let deps = get_deps(entry, root, opts.check_npm_installed)?;
+    let deps = get_deps(entry, root, opts.check_npm_installed.unwrap_or(false))?;
     let npm = deps.npm;
     let nodes = deps.nodes;
     let warns = deps.warns;

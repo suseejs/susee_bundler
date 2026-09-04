@@ -27,6 +27,7 @@
 //! detail lines). A non-zero-style failure is reported through
 //! [`susee_log::error`] when any hard-gate check finds issues.
 
+pub mod check_installed;
 mod helpers;
 
 use crate::susee_log;
@@ -36,7 +37,6 @@ use colored::Colorize;
 use helpers::{
     CheckReport, check_anonymous, check_default_exports, check_duplicates, check_undefined_usage,
 };
-
 /// Run the three hard-gate checks ([`check_duplicates`],
 /// [`check_missing_types`], [`check_undefined_usage`]) and aggregate their
 /// reports.
@@ -178,7 +178,7 @@ fn print_report(report: &CheckReport) {
     let header = match report.kind {
         helpers::CheckKind::Duplicates => "Duplicated declarations",
         helpers::CheckKind::Anonymous => "Anonymous imports/exports",
-        helpers::CheckKind::ExportDefault => "export default usage",
+        helpers::CheckKind::ExportDefault => "Export default usage",
         helpers::CheckKind::UndefinedUsage => "Undefined identifier usage",
     };
 

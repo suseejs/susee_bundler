@@ -9,7 +9,6 @@
 //! [`susee_bundler`] for the main entry point.
 
 mod bundler;
-mod susee_fs;
 mod susee_log;
 mod tree;
 mod types;
@@ -23,7 +22,6 @@ pub use bundler::BundleResult;
 use colored::*;
 use std::path::Path;
 use std::time::Instant;
-pub use susee_fs::SuseeFs;
 /// Re-export of [`CheckOptions`] from the tree module.
 pub use tree::CheckOptions;
 
