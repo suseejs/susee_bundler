@@ -108,13 +108,13 @@ fn check_opts_anonymous(dep_files: &[DepsFile]) -> Result<(), ()> {
 ///
 /// [`susee_log::error`]: susee_log::error
 pub fn run_default_check(dep_files: &[DepsFile]) {
-    println!("{}", "Susee running default checks…".cyan());
+    println!("{}", "Running default checks…".cyan());
     match check_default(dep_files) {
         Ok(()) => {
-            println!("{}", "susee: no issues found in default checks ✓".green());
+            println!("{}", "No issues found in default checks ✓".green());
         }
         Err(()) => {
-            let info = "Susee found issues that must be fixed before bundling.";
+            let info = "Found issues that must be fixed before bundling.";
             let cause = "See the report above for file names, line positions, and \
                          suggested fixes. Each category that found issues must be \
                          resolved (or the declaration renamed to a named export).";
@@ -131,13 +131,15 @@ pub fn run_default_check(dep_files: &[DepsFile]) {
 ///
 /// [`susee_log::error`]: susee_log::error
 pub fn run_check_opts_default_exports(dep_files: &[DepsFile]) {
-    println!("{}", "Susee running default_exports check…".cyan());
+    println!("{}", "");
+    println!("{}", "Running default_exports check…".cyan());
     match check_opts_default_exports(dep_files) {
         Ok(()) => {
             println!("{}", "No default_exports found ✓".green());
+            println!("{}", "");
         }
         Err(()) => {
-            let info = "Susee found default_exports that should be fixed before bundling.";
+            let info = "Found default_exports that should be fixed before bundling.";
             let cause = "See the report above for file names, line positions, and suggested fixes.";
             susee_log::error(info, cause, true);
         }
@@ -152,13 +154,15 @@ pub fn run_check_opts_default_exports(dep_files: &[DepsFile]) {
 ///
 /// [`susee_log::error`]: susee_log::error
 pub fn run_check_opts_anonymous(dep_files: &[DepsFile]) {
-    println!("{}", "Susee running default_exports check…".cyan());
+    println!("{}", "");
+    println!("{}", "Running default_exports check…".cyan());
     match check_opts_anonymous(dep_files) {
         Ok(()) => {
             println!("{}", "No anonymous found ✓".green());
+            println!("{}", "");
         }
         Err(()) => {
-            let info = "Susee found anonymous that should be fixed before bundling.";
+            let info = "Found anonymous that should be fixed before bundling.";
             let cause = "See the report above for file names, line positions, and suggested fixes.";
             susee_log::error(info, cause, true);
         }

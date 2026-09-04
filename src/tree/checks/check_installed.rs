@@ -14,6 +14,8 @@
 //! normalized to their root package name before checking.
 use std::path::Path;
 
+use colored::*;
+
 use crate::tree::package_info::PackageInfo;
 
 /// Normalize an npm specifier to its root package name.
@@ -88,9 +90,13 @@ pub fn check_npm_installed(
     }
 
     if missing.is_empty() {
+        println!("{}", "");
+        println!("{}", "Running npm dependencies check…".cyan());
+        println!("{}", "All npm dependencies are installed ✓".green());
+        println!("{}", "");
         Ok(())
     } else {
-        let info = "Susee found npm dependencies that are not installed.";
+        let info = "Found npm dependencies that are not installed.";
         let cause = format!(
             "The following npm packages are imported but not installed in \
              node_modules (run `npm install` to fix):\n{}",
