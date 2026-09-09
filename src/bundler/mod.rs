@@ -2,7 +2,9 @@ mod hooks;
 
 use crate::tree::susee_tree;
 use crate::types::{ModuleType, ProjectType};
-use crate::utils::{is_non_local_import, merge_content, merge_imports_statement};
+use crate::utils::{
+    is_non_local_import, merge_content, merge_imports_statement, strip_empty_lines_bundler,
+};
 use hooks::{anonymous_handler, clean, export_default_handler, remove_handler};
 use std::path::Path;
 
@@ -108,18 +110,9 @@ pub fn bundler<P: AsRef<Path>>(
     // line.trim())`, which would corrupt multi-line template literals and
     // other source where indentation is significant.
     //
-    // Use `&&` so that BOTH conditions must hold for a line to be kept
-    // (the previous `||` kept everything — see Bug 1 in repo memory).
-    content = content
-        .lines()
-        .filter(|line| {
-            let trimmed = line.trim();
-            !trimmed.is_empty() && !trimmed.starts_with(';')
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string();
+    // Template-literal-aware: blank lines *inside* multi-line template
+    // literals are preserved (tracked via backtick state across lines).
+    content = strip_empty_lines_bundler(&content);
     let file = if project_type == ProjectType::JS {
         "bundle.js"
     } else {

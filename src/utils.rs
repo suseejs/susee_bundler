@@ -134,19 +134,129 @@ pub fn path_relative(base: &Path, abs: &Path) -> String {
         .unwrap_or_else(|_| abs.to_string_lossy().replace('\\', "/"))
 }
 
-/// Strip lines that are empty or consist of only a semicolon.
+/// Check whether a backtick is "active" (i.e. we are inside a template
+/// literal) after scanning a single line.
+///
+/// `in_template` is the state *before* this line starts. The function
+/// returns the state *after* the line. Lines that are entirely inside a
+/// template literal (no opening or closing backtick on them) will return
+/// the same state unchanged.
+///
+/// Escaped backticks (`\``) and backticks inside line comments (`//`) and
+/// single/double-quoted strings on the same line are ignored.
+fn update_template_state(line: &str, in_template: bool) -> bool {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_tmpl = in_template;
+
+    while i < chars.len() {
+        let c = chars[i];
+
+        if in_tmpl {
+            // Inside a template literal — look for the closing backtick.
+            if c == '\\' {
+                i += 2; // skip escaped char
+                continue;
+            }
+            if c == '`' {
+                in_tmpl = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        // Outside a template literal.
+        match c {
+            '\\' => {
+                i += 2; // skip escaped char
+            }
+            '/' if i + 1 < chars.len() && chars[i + 1] == '/' => {
+                // Line comment — rest of the line is ignored.
+                break;
+            }
+            '"' | '\'' => {
+                // Skip a single/double-quoted string on this line.
+                let quote = c;
+                i += 1;
+                while i < chars.len() {
+                    if chars[i] == '\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if chars[i] == quote {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            '`' => {
+                in_tmpl = true;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    in_tmpl
+}
+
+/// Template-literal-aware filter predicate for a single line.
+///
+/// Returns `true` if the line should be **kept**. Blank lines and `;`-only
+/// lines are dropped **only when outside a template literal**. Inside a
+/// template literal, every line is kept verbatim.
+///
+/// `in_template` is the state *before* this line; it is updated by
+/// [`update_template_state`] and returned via the closure's captured state.
+fn keep_line(line: &str, in_template: &mut bool, also_skip_semicolon: bool) -> bool {
+    let in_tmpl = *in_template;
+    *in_template = update_template_state(line, in_tmpl);
+
+    if in_tmpl {
+        // We were inside a template literal at the start of this line —
+        // always keep it, even if it's blank.
+        return true;
+    }
+
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if also_skip_semicolon && trimmed == ";" {
+        return false;
+    }
+    // Also handle the bundler/mod.rs variant: skip lines starting with ';'
+    if !also_skip_semicolon && trimmed.starts_with(';') {
+        return false;
+    }
+    true
+}
+
+/// Strip lines that are empty (or consist of only a semicolon) **outside**
+/// of template literals. Blank lines inside multi-line template literals
+/// are preserved.
 ///
 /// Used after import/export removal and tree-shaking to clean up the
-/// leftover blank/`;`-only lines. Multi-line template literals are safe
-/// because only the *trimmed* line is checked — the original line content
-/// is preserved in the output.
+/// leftover blank/`;`-only lines.
 pub fn strip_empty_lines(content: &str) -> String {
+    strip_empty_lines_impl(content, true)
+}
+
+/// Like [`strip_empty_lines`] but skips lines that *start with* `;` rather
+/// than lines that are exactly `;`. Used by the main bundler pipeline
+/// (`bundler/mod.rs`).
+pub fn strip_empty_lines_bundler(content: &str) -> String {
+    strip_empty_lines_impl(content, false)
+}
+
+fn strip_empty_lines_impl(content: &str, semicolon_only: bool) -> String {
+    let mut in_template = false;
     content
         .lines()
-        .filter(|line| {
-            let trimmed = line.trim();
-            !trimmed.is_empty() && trimmed != ";"
-        })
+        .filter(|line| keep_line(line, &mut in_template, semicolon_only))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
@@ -450,4 +560,111 @@ pub fn merge_imports_statement(imports: &[String]) -> Vec<String> {
 
     merged.sort();
     merged
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_empty_lines_removes_blank_lines_outside_template() {
+        let input = "const a = 1;\n\n\nconst b = 2;\n";
+        let result = strip_empty_lines(input);
+        assert_eq!(result, "const a = 1;\nconst b = 2;");
+    }
+
+    #[test]
+    fn strip_empty_lines_removes_semicolon_only_lines() {
+        let input = "const a = 1;\n;\nconst b = 2;\n";
+        let result = strip_empty_lines(input);
+        assert_eq!(result, "const a = 1;\nconst b = 2;");
+    }
+
+    #[test]
+    fn strip_empty_lines_trims_outer_whitespace() {
+        let result = strip_empty_lines("  const x = 1;  ");
+        assert_eq!(result, "const x = 1;");
+    }
+
+    #[test]
+    fn strip_empty_lines_preserves_blank_lines_in_template_literal() {
+        let input = "const txt = `# Header\n\n## Section`;\nconst x = 1;";
+        let result = strip_empty_lines(input);
+        assert!(
+            result.contains("# Header\n\n## Section"),
+            "blank line inside template should be preserved, got: {result}"
+        );
+    }
+
+    #[test]
+    fn strip_empty_lines_preserves_multiple_blank_lines_in_template() {
+        let input = "const txt = `a\n\n\n\nb`;\n";
+        let result = strip_empty_lines(input);
+        assert!(
+            result.contains("a\n\n\n\nb"),
+            "multiple blank lines inside template should be preserved, got: {result}"
+        );
+    }
+
+    #[test]
+    fn strip_empty_lines_strips_blank_outside_but_preserves_inside_template() {
+        let input = "const a = 1;\n\nconst txt = `line1\n\nline2`;\n\nconst b = 2;\n";
+        let result = strip_empty_lines(input);
+        // Blank line between `const a` and `const txt` should be removed.
+        assert!(!result.contains("const a = 1;\n\nconst txt"));
+        // Blank line inside template should be preserved.
+        assert!(result.contains("line1\n\nline2"));
+        // Blank line between template and `const b` should be removed.
+        assert!(!result.contains(";\n\nconst b = 2;"));
+    }
+
+    #[test]
+    fn strip_empty_lines_handles_escaped_backtick_in_template() {
+        let input = "const txt = `escaped \\` backtick\n\ntext`;\n";
+        let result = strip_empty_lines(input);
+        assert!(
+            result.contains("text`"),
+            "template should close correctly after escaped backtick, got: {result}"
+        );
+    }
+
+    #[test]
+    fn strip_empty_lines_handles_backtick_in_line_comment() {
+        // Backtick in a comment should not open a template literal.
+        let input = "const a = 1; // note: ` is a backtick\n\nconst b = 2;\n";
+        let result = strip_empty_lines(input);
+        assert_eq!(
+            result,
+            "const a = 1; // note: ` is a backtick\nconst b = 2;"
+        );
+    }
+
+    #[test]
+    fn strip_empty_lines_handles_backtick_in_string() {
+        // Backtick inside a regular string should not affect template state.
+        let input = "const a = \"`not a template`\";\n\nconst b = 2;\n";
+        let result = strip_empty_lines(input);
+        assert_eq!(result, "const a = \"`not a template`\";\nconst b = 2;");
+    }
+
+    #[test]
+    fn strip_empty_lines_bundler_skips_lines_starting_with_semicolon() {
+        let input = "const a = 1;\n;\nconst b = 2;\n";
+        let result = strip_empty_lines_bundler(input);
+        assert_eq!(result, "const a = 1;\nconst b = 2;");
+    }
+
+    #[test]
+    fn strip_empty_lines_bundler_preserves_template_blanks() {
+        let input = "const txt = `x\n\ny`;\n\nconst a = 1;\n";
+        let result = strip_empty_lines_bundler(input);
+        assert!(
+            result.contains("x\n\ny"),
+            "blank inside template should be preserved, got: {result}"
+        );
+        assert!(
+            !result.contains("y`;\n\nconst a"),
+            "blank outside template should be removed, got: {result}"
+        );
+    }
 }

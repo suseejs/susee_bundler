@@ -33,17 +33,12 @@ fn is_cts_file(dep: &DepsFile) -> bool {
 
 /// Strip lines that are just whitespace + semicolons, matching the CJS handler
 /// cleanup.
+///
+/// Template-literal-aware: blank lines inside multi-line template literals
+/// are preserved.
 fn strip_empty_semicolon_lines(content: &str) -> String {
-    content
-        .lines()
-        .filter(|line| {
-            let trimmed = line.trim();
-            !(trimmed.is_empty() || trimmed == ";")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
+    use crate::utils::strip_empty_lines;
+    strip_empty_lines(content)
 }
 
 /// Replace a `.cts` extension in a file path with `.ts`.
@@ -268,6 +263,15 @@ mod tests {
         assert!(!result.contains("\n;\n"));
         assert!(result.contains("const x = 1;"));
         assert!(result.contains("const y = 2;"));
+    }
+
+    #[test]
+    fn test_strip_empty_semicolon_lines_preserves_template_blanks() {
+        let result = strip_empty_semicolon_lines("const x = 1;\nconst t = `a\n\nb`;\n\nconst y = 2;");
+        // Blank inside template literal should be preserved.
+        assert!(result.contains("a\n\nb"), "blank inside template should be preserved, got: {result}");
+        // Blank outside template literal should be removed.
+        assert!(!result.contains("b`;\n\nconst y"), "blank outside template should be removed, got: {result}");
     }
 
     // --- rename_cts_to_ts ---
