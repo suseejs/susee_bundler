@@ -32,11 +32,11 @@ use std::path::Path;
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 
+use crate::tree::checks::check_installed;
 use crate::tree::checks::helpers::{
     CheckKind, CheckReport, check_anonymous, check_default_exports, check_duplicates,
     check_undefined_usage,
 };
-use crate::tree::checks::check_installed;
 use crate::tree::index::get_deps;
 use crate::tree::package_info::get_package_info;
 use crate::types::DepsFile;
@@ -231,11 +231,7 @@ fn report_to_diagnostics(report: &CheckReport) -> Vec<LintDiagnostic> {
 /// vectors. The function never exits the process — the caller decides how
 /// to handle the diagnostics.
 #[napi]
-pub fn susee_lint(
-    entry: String,
-    root: Option<String>,
-    options: Option<LintOptions>,
-) -> LintResult {
+pub fn susee_lint(entry: String, root: Option<String>, options: Option<LintOptions>) -> LintResult {
     let dir_root = root
         .as_deref()
         .map(Path::new)
@@ -265,7 +261,10 @@ pub fn susee_lint(
     let mut warnings = Vec::new();
 
     // --- Hard-gate checks (always run) ---
-    let hard_reports = [check_duplicates(dep_files), check_undefined_usage(dep_files)];
+    let hard_reports = [
+        check_duplicates(dep_files),
+        check_undefined_usage(dep_files),
+    ];
     for report in &hard_reports {
         if report.has_issues() {
             errors.extend(report_to_diagnostics(report));
@@ -293,22 +292,65 @@ pub fn susee_lint(
         let pkg = get_package_info(dir_root);
         let npm = &deps.npm;
         let node_modules = dir_root.join("node_modules");
+
+        // Phase 1: package.json declaration check.
+        // Every imported npm package must be explicitly listed in package.json.
+        // A transitive dependency that is only in node_modules because another
+        // package pulled it in is NOT sufficient.
         for specifier in npm {
             let root_name = root_package_name(specifier);
             if root_name.is_empty() {
                 continue;
             }
-            if !node_modules.join(root_name).exists() {
+            if !pkg.contains(root_name) {
+                errors.push(LintDiagnostic {
+                    severity: "error".to_string(),
+                    rule: "npm-not-declared".to_string(),
+                    file: String::new(),
+                    line: 0,
+                    column: 0,
+                    message: format!(
+                        "npm package \"{specifier}\" is imported but not declared in package.json"
+                    ),
+                    details: vec![
+                        format!("  package: {specifier}"),
+                        format!(
+                            "  suggestion: add \"{root_name}\" to package.json dependencies or devDependencies, then run `npm install` or `pnpm install`"
+                        ),
+                    ],
+                });
+            }
+        }
+
+        // Phase 2: node_modules installation check.
+        // Use `fs::metadata` (follows symlinks) so pnpm's symlinked
+        // node_modules structure is handled correctly.
+        for specifier in npm {
+            let root_name = root_package_name(specifier);
+            if root_name.is_empty() {
+                continue;
+            }
+            // Skip specifiers that are not declared in package.json — they
+            // were already reported in Phase 1.
+            if !pkg.contains(root_name) {
+                continue;
+            }
+            let pkg_path = node_modules.join(root_name);
+            if std::fs::metadata(&pkg_path).is_err() {
                 errors.push(LintDiagnostic {
                     severity: "error".to_string(),
                     rule: "npm-not-installed".to_string(),
                     file: String::new(),
                     line: 0,
                     column: 0,
-                    message: format!("npm package \"{specifier}\" is not installed in node_modules"),
+                    message: format!(
+                        "npm package \"{specifier}\" is declared in package.json but not installed in node_modules"
+                    ),
                     details: vec![
                         format!("  package: {specifier}"),
-                        format!("  suggestion: run `npm install` to install missing packages"),
+                        format!(
+                            "  suggestion: run `npm install` or `pnpm install` to install missing packages"
+                        ),
                     ],
                 });
             }
