@@ -50,7 +50,7 @@ const EXPORT_DEFAULT_PREFIX_KEY: &str = "ExportDefault";
 /// `dir` if the file is named `index`.
 ///
 /// Mirrors `getFileKey` from `__local__/ts/bundler/lib/helpers.ts`.
-fn get_file_key(file: &str) -> String {
+pub(crate) fn get_file_key(file: &str) -> String {
     let path = Path::new(file);
     let dir = path
         .parent()
@@ -71,7 +71,7 @@ fn get_file_key(file: &str) -> String {
 /// `containing_file`, then normalize it into a key via [`get_file_key`].
 ///
 /// Mirrors `getModuleKeyFromSpecifier` from `__local__/ts/bundler/lib/helpers.ts`.
-fn get_module_key(specifier: &str, containing_file: &str) -> String {
+pub(crate) fn get_module_key(specifier: &str, containing_file: &str) -> String {
     if specifier.starts_with('.') || specifier.starts_with('/') {
         let base_dir = Path::new(containing_file)
             .parent()
@@ -90,7 +90,7 @@ fn get_module_key(specifier: &str, containing_file: &str) -> String {
 /// Extract the module specifier string from an import declaration.
 ///
 /// Returns the raw string inside the quotes, e.g. `"./foo"` → `./foo`.
-fn import_source(decl: &ImportDeclaration<'_>) -> String {
+pub(crate) fn import_source(decl: &ImportDeclaration<'_>) -> String {
     decl.source.value.as_str().to_string()
 }
 

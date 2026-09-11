@@ -5,7 +5,7 @@ use crate::types::{ModuleType, ProjectType};
 use crate::utils::{
     is_non_local_import, merge_content, merge_imports_statement, strip_empty_lines_bundler,
 };
-use hooks::{anonymous_handler, clean, export_default_handler, remove_handler};
+use hooks::{anonymous_handler, clean, duplicate_handler, export_default_handler, remove_handler};
 use std::path::Path;
 
 use napi_derive::napi;
@@ -87,6 +87,12 @@ pub fn bundler<P: AsRef<Path>>(
     let mut dep_files: Vec<super::types::DepsFile> = tree.dep_files;
     let cde = opts.check_default_exports.unwrap_or(false);
     let ca = opts.check_anonymous.unwrap_or(false);
+    // Proactively rename cross-file duplicate non-exported declarations
+    // to unique names. This replaces the old `check_duplicates` check that
+    // reported and exited — now we fix it automatically during bundling.
+    // Runs before export_default_handler / anonymous_handler so the `_u`
+    // sigil doesn't collide with the `_d` / `_a` sigils those use.
+    dep_files = duplicate_handler(dep_files);
     if !cde {
         dep_files = export_default_handler(dep_files);
     }
