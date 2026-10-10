@@ -5,7 +5,10 @@ use crate::types::{ModuleType, ProjectType};
 use crate::utils::{
     is_non_local_import, merge_content, merge_imports_statement, strip_empty_lines_bundler,
 };
-use hooks::{anonymous_handler, clean, export_default_handler, remove_handler};
+use hooks::{
+    anonymous_handler, clean, duplicate_handler, export_default_handler, export_star_handler,
+    remove_handler,
+};
 use std::path::Path;
 
 use napi_derive::napi;
@@ -59,16 +62,18 @@ pub struct BundleResult {
 ///    when `opts.check_default_exports == Some(true)`).
 /// 3. [`anonymous_handler`] — name anonymous default exports (skipped when
 ///    `opts.check_anonymous == Some(true)`).
-/// 4. [`remove_handler`] — strip all import/export syntax; collect removed
+/// 4. [`export_star_handler`] — expand entry-file `export * from "…"`
+///    re-exports of local modules into explicit `export { … }` statements.
+/// 5. [`remove_handler`] — strip all import/export syntax; collect removed
 ///    import text for re-emission.
-/// 5. Filter removed imports to non-local only (npm packages, node built-ins)
+/// 6. Filter removed imports to non-local only (npm packages, node built-ins)
 ///    via [`is_non_local_import`], then merge duplicates via
 ///    [`merge_imports_statement`].
-/// 6. [`merge_content`] — concatenate all dependency file contents with
+/// 7. [`merge_content`] — concatenate all dependency file contents with
 ///    `//path` separator comments.
-/// 7. Remove empty lines and stray `;`-only lines left by import removal.
-/// 8. [`clean`] — tree-shake unused declarations from the concatenated bundle.
-/// 9. [`pretty_print`] — round-trip through oxc's codegen for normalized
+/// 8. Remove empty lines and stray `;`-only lines left by import removal.
+/// 9. [`clean`] — tree-shake unused declarations from the concatenated bundle.
+/// 10. [`pretty_print`] — round-trip through oxc's codegen for normalized
 ///    formatting.
 ///
 /// # Errors
@@ -87,12 +92,24 @@ pub fn bundler<P: AsRef<Path>>(
     let mut dep_files: Vec<super::types::DepsFile> = tree.dep_files;
     let cde = opts.check_default_exports.unwrap_or(false);
     let ca = opts.check_anonymous.unwrap_or(false);
+    // Proactively rename cross-file duplicate non-exported declarations
+    // to unique names. This replaces the old `check_duplicates` check that
+    // reported and exited — now we fix it automatically during bundling.
+    // Runs before export_default_handler / anonymous_handler so the `_u`
+    // sigil doesn't collide with the `_d` / `_a` sigils those use.
+    dep_files = duplicate_handler(dep_files);
     if !cde {
         dep_files = export_default_handler(dep_files);
     }
     if !ca {
         dep_files = anonymous_handler(dep_files);
     }
+    // Expand entry-file `export * from "./local"` re-exports into explicit
+    // `export { … }` statements. Must run after the rename hooks (so the
+    // enumerated binding names reflect any `_d`/`_a`/`_u` renames) and
+    // before `remove_handler`, which would otherwise leave the star
+    // statement in the entry pointing at an inlined module path.
+    dep_files = export_star_handler(dep_files);
     let (deps_files, removed_imports) = remove_handler(dep_files);
     let removed_statements: Vec<String> = removed_imports.into_iter().map(|r| r.text).collect();
     let mut removed_stats = removed_statements;

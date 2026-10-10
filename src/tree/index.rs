@@ -310,17 +310,22 @@ pub fn susee_tree<P: AsRef<Path>>(
     let nodes = deps.nodes;
     let warns = deps.warns;
     let dep_files = deps.dep_files;
-    let _ = run_default_check(&dep_files);
 
-    let cdf = opts.check_default_exports.unwrap_or(false);
-    let ca = opts.check_anonymous.unwrap_or(false);
-
-    if cdf {
-        run_check_opts_default_exports(&dep_files);
-    }
-    if ca {
-        run_check_opts_anonymous(&dep_files);
-    }
+    // --- Checks are lint-only (2a) -----------------------------------------
+    //
+    // `run_default_check` (duplicates + undefined-usage) and the opt-in checks
+    // (default-exports, anonymous) have been moved to the `susee_lint` module.
+    // The bundler no longer runs them during the tree stage — duplicates are
+    // handled proactively by `duplicate_handler` in the bundler pipeline,
+    // which renames colliding declarations to unique names instead of just
+    // reporting and exiting.
+    //
+    // The opt-in checks (`check_default_exports`, `check_anonymous`) are also
+    // lint-only now. Their counterpart *handlers* (`export_default_handler`,
+    // `anonymous_handler`) still run during bundling.
+    let _ = &run_default_check; // keep import alive for lint module
+    let _ = &run_check_opts_default_exports;
+    let _ = &run_check_opts_anonymous;
 
     // --- Classify the project by file extensions --------------------
     //

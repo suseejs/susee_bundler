@@ -1,12 +1,20 @@
 mod anonymous;
+mod duplicate;
 mod export_default;
+mod export_star;
 mod remove_handler;
 mod unused_code;
 
 /// Re-export of `anonymous_handler` — normalises anonymous exports/imports.
 pub use anonymous::anonymous_handler;
+/// Re-export of `duplicate_handler` — proactively renames cross-file
+/// duplicate non-exported declarations to unique names.
+pub use duplicate::duplicate_handler;
 /// Re-export of `export_default_handler` — handles named default exports.
 pub use export_default::export_default_handler;
+/// Re-export of `export_star_handler` — expands entry-file
+/// `export * from "…"` re-exports into explicit `export { … }` statements.
+pub use export_star::export_star_handler;
 /// Re-export of `remove_handler` — removes processed import/export statements.
 pub use remove_handler::remove_handler;
 /// Re-export of `clean` — removes unused code post-bundle.
